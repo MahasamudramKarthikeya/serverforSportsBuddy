@@ -1,117 +1,126 @@
-// server.js - Express proxy with real keys loaded from .env
-const express = require('express');
-const fetch = require('node-fetch');
-const cors = require('cors');
-const dotenv = require('dotenv');
+// server.js - Fully corrected proxy server
+const express = require("express");
+const fetch = require("node-fetch").default; // Important for CommonJS
+const cors = require("cors");
+const dotenv = require("dotenv");
 
 dotenv.config();
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
 
-// RapidAPI GeoDB settings
-const GEO_DB_API_HOST = process.env.GEO_DB_API_HOST || "wft-geo-db.p.rapidapi.com";
-const GEO_DB_API_KEY = process.env.GEO_DB_API_KEY || "4bb94db0c9msha5e7677bb5a0eccp154176jsncbb124f8c237";
+// ---------------- GeoDB Cities ----------------
+const GEO_DB_API_HOST =
+  process.env.GEO_DB_API_HOST || "wft-geo-db.p.rapidapi.com";
+const GEO_DB_API_KEY = process.env.GEO_DB_API_KEY || "";
 
-// Playo settings
-const PLAYO_VENUE_URL = process.env.PLAYO_VENUE_URL || "https://playo.co/_next/data/F8G8ypLIqaoTgwKPXMu7e/venues/";
-const PLAYO_AUTH_TOKEN = process.env.PLAYO_AUTH_TOKEN || "5534898698eb3426d00168b6ed447d23d000026552ed6200";
-const PLAYO_USER_AGENT = process.env.PLAYO_USER_AGENT || `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36`;
+app.get("/", (req, res) => res.send("Proxy server running ✅"));
 
-// EmailJS settings
-const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "service_2jpsg99";
-const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "template_2utqp9m";
-const EMAILJS_USER_ID = process.env.EMAILJS_USER_ID || "dSKjNZ4-J5-UsAKDQ";
-
-app.get('/', (req, res) => res.send('Proxy server running ✅'));
-
-// GET /api/cities?q= - proxies GeoDB (RapidAPI) for city suggestions
-app.get('/api/cities', async (req, res) => {
-  const q = req.query.q || '';
+app.get("/api/cities", async (req, res) => {
+  const q = req.query.q || "";
   if (GEO_DB_API_KEY && GEO_DB_API_HOST) {
     try {
-      const upstream = `https://${GEO_DB_API_HOST}/v1/geo/cities?namePrefix=${encodeURIComponent(q)}&limit=8&sort=-population`;
-      const r = await fetch(upstream, {
-        method: 'GET',
+      const url = `https://${GEO_DB_API_HOST}/v1/geo/cities?namePrefix=${encodeURIComponent(
+        q
+      )}&limit=8&sort=-populatio`;
+      const response = await fetch(url, {
+        method: "GET",
         headers: {
-          'X-RapidAPI-Key': GEO_DB_API_KEY,
-          'X-RapidAPI-Host': GEO_DB_API_HOST
-        }
+          "X-RapidAPI-Key": GEO_DB_API_KEY,
+          "X-RapidAPI-Host": GEO_DB_API_HOST,
+        },
       });
-      const data = await r.json();
+      const data = await response.json();
       return res.json(data);
     } catch (err) {
-      console.error('GeoDB proxy error:', err.message || err);
+      console.error("GeoDB proxy error:", err.message || err);
     }
   }
 
-  // fallback simple list
+  // Fallback cities
   const cities = [
-    { name: 'Hyderabad', lat: 17.385044, lng: 78.486671 },
-    { name: 'Bangalore', lat: 12.971599, lng: 77.594566 },
-    { name: 'Tirupati', lat: 13.632, lng: 79.423 },
-    { name: 'Visakhapatnam', lat: 17.7042, lng: 83.2978 }
+    { name: "Hyderabad", lat: 17.385044, lng: 78.486671 },
+    { name: "Bangalore", lat: 12.971599, lng: 77.594566 },
+    { name: "Tirupati", lat: 13.632, lng: 79.423 },
+    { name: "Visakhapatnam", lat: 17.7042, lng: 83.2978 },
   ];
-  const out = cities.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+  const out = cities.filter(
+    (c) => !q || c.name.toLowerCase().includes(q.toLowerCase())
+  );
   res.json({ data: out });
 });
 
-// GET /api/venues?lat=&lng=&pageNo= - proxies Playo or returns mock
-app.get('/api/venues', async (req, res) => {
-  const lat = req.query.lat || process.env.DEFAULT_LAT || '';
-  const lng = req.query.lng || process.env.DEFAULT_LNG || '';
-  const pageNo = req.query.pageNo || 1;
+// ---------------- Playo Venues ----------------
+const PLAYO_AUTH_TOKEN = process.env.PLAYO_AUTH_TOKEN || ""; // must have Bearer token
 
-  if (PLAYO_VENUE_URL && PLAYO_AUTH_TOKEN) {
-    try {
-      // If PLAYO_VENUE_URL expects path-based, caller should set it accordingly in .env.
-      const url = PLAYO_VENUE_URL + `?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&page=${encodeURIComponent(pageNo)}`;
-      const r = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${PLAYO_AUTH_TOKEN}`,
-          'User-Agent': PLAYO_USER_AGENT
-        }
-      });
-      const data = await r.json();
-      return res.json(data);
-    } catch (err) {
-      console.error('Playo proxy error:', err.message || err);
-    }
-  }
+app.get("/api/venues", async (req, res) => {
+  const { lat, lng, pageNo } = req.query;
 
-  // fallback mock response
-  res.json({ message: 'Mock response - PLAYO not configured on server', venues: [] });
-});
-
-// POST /api/send-email - server-side proxy to EmailJS
-app.post('/api/send-email', async (req, res) => {
-  const template_params = req.body.template_params || req.body;
-  const service_id = process.env.EMAILJS_SERVICE_ID || EMAILJS_SERVICE_ID;
-  const template_id = process.env.EMAILJS_TEMPLATE_ID || EMAILJS_TEMPLATE_ID;
-  const user_id = process.env.EMAILJS_USER_ID || EMAILJS_USER_ID;
-
-  if (!service_id || !template_id || !user_id) {
-    return res.status(500).json({ error: 'EmailJS credentials not configured on server' });
+  if (!PLAYO_AUTH_TOKEN) {
+    return res.status(500).json({ error: "Playo auth token not configured" });
   }
 
   try {
-    const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch("https://api.playo.io/venue-public/v2/list", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${PLAYO_AUTH_TOKEN}`,
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
-        service_id,
-        template_id,
-        user_id,
-        template_params
-      })
+        page: pageNo || 0,
+        lat: lat || 0,
+        lng: lng || 0,
+        sportId: [],
+        category: "venue",
+      }),
     });
-    const data = await response.text();
-    res.status(response.status).send(data);
+
+    const data = await response.json();
+    res.json(data);
   } catch (err) {
-    console.error('EmailJS proxy error:', err.message || err);
+    console.error("Playo fetch error:", err.message || err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------- EmailJS ----------------
+const EMAILJS_SERVICE_ID = process.env.EMAILJS_SERVICE_ID || "";
+const EMAILJS_TEMPLATE_ID = process.env.EMAILJS_TEMPLATE_ID || "";
+const EMAILJS_USER_ID = process.env.EMAILJS_USER_ID || "";
+
+app.post("/api/send-email", async (req, res) => {
+  const template_params = req.body.template_params || req.body;
+
+  if (!EMAILJS_SERVICE_ID || !EMAILJS_TEMPLATE_ID || !EMAILJS_USER_ID) {
+    return res
+      .status(500)
+      .json({ error: "EmailJS credentials not configured" });
+  }
+
+  try {
+    const response = await fetch(
+      "https://api.emailjs.com/api/v1.0/email/send",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: EMAILJS_SERVICE_ID,
+          template_id: EMAILJS_TEMPLATE_ID,
+          user_id: EMAILJS_USER_ID,
+          template_params,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("EmailJS proxy error:", err.message || err);
     res.status(500).json({ error: err.message });
   }
 });
