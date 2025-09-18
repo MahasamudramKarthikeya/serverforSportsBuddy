@@ -1,4 +1,4 @@
-// server.js - Fully corrected proxy server
+// server.js - Proxy server with explicit CORS handling
 const express = require("express");
 const fetch = require("node-fetch").default; // Important for CommonJS
 const cors = require("cors");
@@ -7,7 +7,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 
 const app = express();
-app.use(cors()); // This allows CORS for all routes
+app.use(cors()); // This allows CORS for all routes globally
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
@@ -63,6 +63,11 @@ app.get("/api/venues/:city/:activeKey", async (req, res) => {
   try {
     const response = await fetch(VENUE_URL);
     const data = await response.json();
+    
+    // Set CORS headers explicitly for this route
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     
     // Return the data back to the client
     res.json(data);
