@@ -58,7 +58,7 @@ app.get("/api/venues/:city/:activeKey", async (req, res) => {
   const { city, activeKey } = req.params;
   
   // Construct the Playo API URL
-  const VENUE_URL = `https://playo.co/_next/data/F8G8ypLIqaoTgwKPXMu7e/venues/${city}/${activeKey}.json`;
+  const VENUE_URL = `https://playo.co/_next/data/BILrBORA4nyP5228jUa_H/venues/${city}/${activeKey}.json`;
 
   try {
     const response = await fetch(VENUE_URL);
